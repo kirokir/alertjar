@@ -1,69 +1,56 @@
-// sw.js - Version 3.4
-
-const CACHE_NAME = 'alert-jar-cache-v3.4';
-// IMPORTANT: Make sure every file listed here actually exists in your repository.
-// If you don't have an 'icons' folder, remove those lines.
+const CACHE_NAME = 'alert-jar-v4.0';
 const urlsToCache = [
   './',
-  './index.html',
   './manifest.json'
-  // Example: './icons/icon-192.png',
-  // Example: './icons/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        // Use individual 'add' calls which are more resilient than 'addAll'
-        // 'addAll' fails if a single request fails.
-        const cachePromises = urlsToCache.map(urlToCache => {
-            return cache.add(urlToCache).catch(err => {
-                console.warn(`Failed to cache ${urlToCache}:`, err);
-            });
-        });
-        return Promise.all(cachePromises);
-      })
+      .then((cache) => cache.addAll(urlsToCache))
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+          if (cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  return self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Never cache or intercept Google API calls.
-  if (url.hostname.endsWith('google.com') || url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('gstatic.com')) {
-    return; // Pass through to the network
-  }
-
-  // Cache-first strategy for app assets
+  // Only cache GET requests
+  if (event.request.method !== 'GET') return;
+  
+  // Don't cache Supabase API calls
+  if (event.request.url.includes('supabase.co')) return;
+  
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        return response || fetch(event.request);
+        if (response) {
+          return response;
+        }
+        return fetch(event.request).then((response) => {
+          // Don't cache if not a valid response
+          if (!response || response.status !== 200 || response.type !== 'basic') {
+            return response;
+          }
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          return response;
+        });
       })
   );
-});
-
-self.addEventListener('message', (event) => {
-    if (event.data && event.data.action === 'skipWaiting') {
-        self.skipWaiting();
-    }
 });
