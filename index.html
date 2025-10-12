@@ -3,7 +3,7 @@
 <head>
 <!--
   Alert Jar - PWA with Advanced Google Drive Sync
-  Version: 3.2 (Corrected Release)
+  Version: 3.3 (Hardened Release)
   Created: 2025-10-10
   Corrections Applied: 2025-10-12
   
@@ -14,9 +14,62 @@
 <meta name="description" content="A lightweight PWA for personal finance and diary tracking with cloud sync.">
 <link rel="manifest" href="manifest.json">
 <title>Alert Jar</title>
+
+<!-- --- ADDED (Solution 1 & 4) --- CSP and Referrer Policy Meta Tags --- -->
+<!-- This explicitly tells the browser which external resources are trusted, preventing security policies from blocking Google's scripts. -->
+<meta http-equiv="Content-Security-Policy" content="
+    script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com https://cdn.jsdelivr.net;
+    connect-src 'self' https://www.googleapis.com https://people.googleapis.com https://accounts.google.com;
+    frame-src 'self' https://accounts.google.com;
+    img-src 'self' https: data:;
+    style-src 'self' 'unsafe-inline';">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<!-- --- END ADDED BLOCK --- -->
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js"></script>
-<script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
-<script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+<!-- --- MODIFIED (Solution 3) --- Removed 'onload' attributes for robust polling -->
+<script src="https://apis.google.com/js/api.js" async defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<!-- --- ADDED (Solution 3) --- Robust Polling for GAPI/GIS Initialization --- -->
+<!-- This script replaces the simple 'onload' attributes with a timer that repeatedly checks
+     if the Google libraries are ready. This prevents race conditions and initialization failures. -->
+<script>
+  function initializeGoogleLibraries() {
+    let gapiReady = false;
+    let gisReady = false;
+    let attempts = 0;
+    const maxAttempts = 100; // Wait for max 10 seconds
+
+    const checkInterval = setInterval(() => {
+        attempts++;
+
+        // Check for GAPI
+        if (!gapiReady && typeof gapi !== 'undefined' && gapi.load) {
+            gapiReady = true;
+            if (typeof gapiLoaded === 'function') gapiLoaded();
+        }
+
+        // Check for GIS
+        if (!gisReady && typeof google !== 'undefined' && google.accounts) {
+            gisReady = true;
+            if (typeof gisLoaded === 'function') gisLoaded();
+        }
+
+        // If both are ready, or we've timed out, stop checking
+        if ((gapiReady && gisReady) || attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            // Final check for failures after timeout
+            if (!gapiReady && typeof gapiLoaded === 'function') gapiLoaded();
+            if (!gisReady && typeof gisLoaded === 'function') gisLoaded();
+        }
+    }, 100);
+  }
+  // Start the check as soon as the DOM is ready
+  document.addEventListener('DOMContentLoaded', initializeGoogleLibraries);
+</script>
+<!-- --- END ADDED BLOCK --- -->
+
 <style>
 :root {
   --primary: #2563eb; --primary-dark: #1e40af; --success: #10b981; --danger: #ef4444;
@@ -29,7 +82,6 @@ html[data-theme="dark"] {
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden; transition: background-color 0.2s, color 0.2s; }
-/* --- ADDED --- Loading indicator styles */
 body.loading::after {
   content: '';
   position: fixed;
@@ -94,7 +146,6 @@ textarea { min-height: 80px; resize: vertical; }
 .time-block-table .check-cell { width: 40px; text-align: center; }
 .time-block-table .check-cell button { background: none; border: 2px solid var(--border); width: 24px; height: 24px; border-radius: 50%; cursor: pointer; color: var(--success); transition: all 0.2s; }
 .time-block-table .check-cell button:hover { border-color: var(--success); }
-/* --- ADDED --- Style for 'done' tasks */
 .time-block-table tr.done { background-color: rgba(16, 185, 129, 0.05); }
 .time-block-table tr.done td:not(.check-cell) { text-decoration: line-through; opacity: 0.7; }
 .time-block-table tr.done .check-cell button { border-color: var(--success); background-color: var(--success); }
@@ -114,7 +165,6 @@ textarea { min-height: 80px; resize: vertical; }
 .settings-group:last-child { border-bottom: none; }
 .settings-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .settings-row label { font-weight: 500; }
-/* --- ADDED --- Toggle switch style */
 .settings-row input[type="checkbox"] {
     appearance: none; width: 44px; height: 24px; background: var(--border); border-radius: 12px;
     position: relative; cursor: pointer; transition: background-color 0.2s;
@@ -125,10 +175,8 @@ textarea { min-height: 80px; resize: vertical; }
 }
 .settings-row input[type="checkbox"]:checked { background-color: var(--success); }
 .settings-row input[type="checkbox"]:checked::before { transform: translateX(20px); }
-
 #toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; max-height: calc(100vh - 2rem); overflow-y: auto; pointer-events: none; }
 .toast { background: var(--text); color: white; padding: 1rem 1.5rem; border-radius: 0.375rem; box-shadow: 0 4px 12px var(--shadow); display: flex; align-items: center; gap: 0.75rem; animation: slideIn 0.3s, fadeOut 0.3s 4.7s forwards; margin-top: 0.5rem; pointer-events: auto;}
-/* --- ADDED --- Action button in toast */
 .toast span { flex-grow: 1; }
 .toast button { margin-left: 1rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white; }
 .toast button:hover { background: rgba(255,255,255,0.4); }
@@ -188,7 +236,6 @@ html[data-theme="dark"] #theme-toggle .moon { display: block; } html[data-theme=
     <div class="card"><h3>🔐 Account</h3><div class="settings-group"><div class="settings-row"><label>Google Drive</label><div id="drive-status" class="status-indicator disconnected"><span>Disconnected</span></div></div><button id="google-disconnect-btn" class="btn btn-secondary hidden">Disconnect</button></div></div>
     <div class="card"><h3>🎨 Appearance</h3><div class="settings-group"><div class="settings-row"><label for="theme-select">Theme</label><select id="theme-select"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div><div class="settings-group"><div class="settings-row"><label for="currency-select">Currency</label><select id="currency-select"><option value="INR">INR (₹)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option><option value="GBP">GBP (£)</option></select></div></div><div class="settings-group"><div class="settings-row"><label for="date-format-select">Date Format</label><select id="date-format-select"><option value="local">Local Default</option><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option></select></div></div></div>
      <div class="card"><h3>💾 Data Management</h3><div class="settings-group"><div class="settings-row"><p>Last cloud backup: <span id="last-backup-status">Never</span></p></div><button id="backup-now-btn" class="btn btn-secondary" disabled>Backup Now</button><button id="restore-data-btn" class="btn btn-secondary" disabled>Restore from Drive</button></div><div class="settings-group"><button id="export-json" class="btn btn-secondary">Export JSON</button><button id="export-csv" class="btn btn-secondary">Export CSV</button></div><div class="settings-group"><label for="import-json" class="btn btn-secondary">Import JSON</label><input type="file" id="import-json" accept=".json" class="hidden"></div>
-     <!-- --- ADDED --- Setting to control auto-logging of tasks -->
      <div class="settings-group"><div class="settings-row"><label for="auto-diary-toggle">Auto-log completed/missed tasks</label><input type="checkbox" id="auto-diary-toggle" checked></div></div>
      <div class="settings-group"><button id="clear-data-btn" class="btn btn-danger">Clear Local Data</button><button id="delete-account-btn" class="btn btn-danger" disabled>Delete All Cloud Data</button></div></div>
   </div>
@@ -212,12 +259,12 @@ html[data-theme="dark"] #theme-toggle .moon { display: block; } html[data-theme=
 <script>
 'use strict';
 // --- App Constants & Config ---
-const APP_VERSION = '3.2'; // --- Corrected --- Version bump
+const APP_VERSION = '3.3';
 const GOOGLE_CLIENT_ID = '304693499609-j0cv1i6094039a0alfeoup0knegvfvol.apps.googleusercontent.com';
-const GOOGLE_API_KEY = 'AIzaSyDK2gJIp6TDrjGv5p4bLQBZP_duzR7ByOs'; // --- NOTE --- Kept as per user request to ignore security fix
+const GOOGLE_API_KEY = 'AIzaSyDK2gJIp6TDrjGv5p4bLQBZP_duzR7ByOs';
 const GOOGLE_DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest", "https://people.googleapis.com/$discovery/rest?version=v1"];
-const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email'; // --- FIX --- Changed to appDataFolder scope
-const DRIVE_FILE_NAME = 'alertjar_data.json'; // --- ADDED --- Constant for backup file
+const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+const DRIVE_FILE_NAME = 'alertjar_data.json';
 const CONFIG = {
   TAG_MAP: ['food', 'rent', 'salary', 'client', 'web dev', 'transport', 'shopping', 'gift', 'health', 'misc', 'paid rent'],
   STOPWORDS: ['the','a','an','is','to','for','of','with','by','from','i','you','and','or','but','in','on']
@@ -239,7 +286,6 @@ if ('serviceWorker' in navigator) {
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
-              // --- FIX --- Make update toast actionable
               const action = {
                 text: 'Refresh',
                 onClick: () => {
@@ -247,19 +293,13 @@ if ('serviceWorker' in navigator) {
                   window.location.reload();
                 }
               };
-              showToast('New version available!', 'info', 0, action); // duration 0 makes it stay
+              showToast('New version available!', 'info', 0, action);
             } else {
               showToast('App ready for offline use!', 'success');
             }
           }
         });
       });
-      // NOTE: For the actionable toast to work, your sw.js file must include:
-      // self.addEventListener('message', event => {
-      //   if (event.data && event.data.action === 'skipWaiting') {
-      //     self.skipWaiting();
-      //   }
-      // });
       setInterval(() => reg.update(), 60 * 60 * 1000);
     }).catch(err => console.error('Service Worker registration failed:', err));
   });
@@ -337,7 +377,6 @@ const sanitize = (str) => {
     div.textContent = String(str);
     return div.innerHTML.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/\//g, '&#x2F;');
 };
-// --- FIX --- Improved amount parser
 function parseAmount(text) {
   const cleaned = text.replace(/,/g, '');
   const match = cleaned.match(/\b\d+(\.\d+)?k?\b/i);
@@ -355,7 +394,6 @@ function extractTags(text) {
   words.forEach(word => { if (word.length >= 4 && word.length <= 15 && !CONFIG.STOPWORDS.includes(word) && isNaN(word) && tags.size < 5) tags.add(word); });
   return Array.from(tags).slice(0, 5);
 }
-// --- FIX --- Enhanced toast function to support action buttons
 function showToast(message, type = 'info', duration = 5000, action = null) {
   const container = document.getElementById('toast-container');
   const toast = document.createElement('div');
@@ -467,7 +505,6 @@ async function addEntry(type, text, btnEl) {
 function renderEntries(type, entries) {
   const container = document.getElementById(`entries-${type}`);
   if (!container) return;
-  // --- FIX --- Added contextual aria-label to delete button
   container.innerHTML = entries.length === 0 ? `<div class="empty-state"><p>No entries yet</p></div>` : entries.map(entry => `
     <div class="entry" data-id="${entry.id}"><div class="entry-header"><div class="entry-time">${formatDateTime(entry.timestamp)}</div>${entry.amount != null ? `<div class="entry-amount ${type}">${formatCurrency(entry.amount)}</div>` : ''}</div><div class="entry-text">${sanitize(entry.text)}</div><div class="entry-actions"><button class="btn btn-danger btn-small" data-action="delete" aria-label="Delete entry for ${sanitize(entry.text.substring(0,50))}">Delete</button></div></div>`).join('');
 }
@@ -507,7 +544,6 @@ async function addDiaryEntry(text, btnEl) {
 function renderDiaryEntries(entries) {
   const container = document.getElementById('entries-diary');
   if (!container) return;
-  // --- FIX --- Added contextual aria-label to delete button
   container.innerHTML = entries.length === 0 ? `<div class="empty-state"><p>No journal entries yet</p></div>` : entries.map(entry => `
     <div class="entry" data-id="${entry.id}"><div class="entry-header"><div class="entry-time">${formatDateTime(entry.timestamp)}</div></div><div class="entry-text">${sanitize(entry.text)}</div><div class="entry-actions"><button class="btn btn-danger btn-small" data-action="delete" aria-label="Delete diary entry from ${formatDateTime(entry.timestamp)}">Delete</button></div></div>`).join('');
 }
@@ -522,7 +558,7 @@ async function refreshDiary() {
     const filters = activeDiaryTag ? { type: 'diary', tags: [activeDiaryTag] } : { type: 'diary' };
     if (searchTerm) filters.search = searchTerm;
     const entries = await getEntries(filters);
-    const allEntries = await getEntries({type: 'diary'}); // for consistent tag cloud
+    const allEntries = await getEntries({type: 'diary'});
     renderDiaryEntries(entries);
     renderDiaryTags(allEntries);
 }
@@ -550,7 +586,7 @@ function renderTimeBlockedTasks(todos) {
         const tr = document.createElement('tr');
         tr.dataset.id = todo.id;
         if (todo.todoMeta.status === 'missed') tr.classList.add('missed');
-        if (todo.todoMeta.status === 'done') tr.classList.add('done'); // --- ADDED --- Class for completed tasks
+        if (todo.todoMeta.status === 'done') tr.classList.add('done');
         tr.innerHTML = `
             <td>${new Date(`1970-01-01T${todo.todoMeta.from}`).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
             <td>${new Date(`1970-01-01T${todo.todoMeta.to}`).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
@@ -587,7 +623,6 @@ async function checkMissedTasks() {
         await refreshAll();
     } catch (error) { console.error('checkMissedTasks failed:', error); }
 }
-// --- FIX --- To-do toggle logic allows reverting to pending state
 async function toggleTodo(id) {
     const todo = await findEntry(id);
     if (!todo || !todo.todoMeta?.isTimeBlocked) { return showToast('Task not found.', 'error'); }
@@ -661,10 +696,8 @@ async function renderCalendar() {
       const indicators = indicatorsData ? Object.entries(indicatorsData).map(([k, v]) => v > 0 ? `<div class="calendar-indicator ${{'a':'asset','l':'liability','d':'diary','t':'todo'}[k]}"></div>` : '').join('') : '';
       const [y, m, d] = dateStr.split('-').map(Number);
       const dayLabel = new Date(y, m - 1, d).toLocaleDateString(navigator.language || 'en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      // --- FIX --- Added role="gridcell" for accessibility
       grid.insertAdjacentHTML('beforeend', `<div role="gridcell" tabindex="0" class="calendar-day ${dateStr === getLocalDate() ? 'today' : ''}" data-date="${dateStr}" aria-label="${dayLabel}">${dayNum}${indicators ? `<div class="calendar-indicators">${indicators}</div>` : ''}</div>`);
     } else {
-      // --- FIX --- Added role="gridcell" for accessibility
       grid.insertAdjacentHTML('beforeend', `<div role="gridcell" class="calendar-day other-month"></div>`);
     }
   }
@@ -778,7 +811,6 @@ document.getElementById('import-json').onchange = (e) => {
       const data = JSON.parse(event.target.result);
       const entries = data.entries ?? (Array.isArray(data) ? data : null);
       if (!validateImportedData(entries)) throw new Error("Invalid format");
-      // --- FIX --- Improved, stronger warning message
       if(!confirm(`WARNING: This will permanently ERASE all current data in the app and replace it with the file's content. This action CANNOT be undone. Proceed with import?`)) return;
       await dbRequest('entries', 'readwrite', 'clear');
       const tx = db.transaction(['entries'], 'readwrite');
@@ -791,7 +823,6 @@ document.getElementById('import-json').onchange = (e) => {
 };
 
 // --- Theme & Modal Management ---
-// --- FIX --- Consolidated theme logic and synchronized UI controls
 const applyTheme = (theme) => {
   const effectiveTheme = theme === 'auto'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -837,7 +868,6 @@ function trapFocus(e, modal) {
 
 // --- Init & Event Listeners ---
 const debounce = (id, func, wait) => { clearTimeout(DEBOUNCE_TIMERS[id]); DEBOUNCE_TIMERS[id] = setTimeout(func, wait); };
-// --- FIX --- Added loading indicator to refreshAll
 const refreshAll = async () => {
     if (refreshPromise) return refreshPromise;
     document.body.classList.add('loading');
@@ -913,7 +943,6 @@ document.getElementById('download-chart').addEventListener('click', downloadChar
 document.getElementById('help-btn').addEventListener('click', () => openModal('help-modal'));
 document.getElementById('clear-data-btn').addEventListener('click', async () => { if(confirm('This will permanently delete all data. Are you sure?')) { await dbRequest('entries','readwrite','clear'); await refreshAll(); showToast('All data cleared.', 'success'); } });
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
-// --- ADDED --- Event listener for theme dropdown to sync with toggle button
 document.getElementById('theme-select').addEventListener('change', (e) => applyTheme(e.target.value));
 document.querySelectorAll('.modal').forEach(m => { m.addEventListener('click', (e) => { if (e.target === m) closeModal(m); }); m.querySelector('.modal-close').addEventListener('click', () => closeModal(m)); });
 document.getElementById('prev-month').addEventListener('click', () => { currentCalendarMonth = new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1); renderCalendar(); });
@@ -954,7 +983,6 @@ document.addEventListener('touchend', (e) => {
 window.addEventListener('beforeunload', stopRecording);
 
 // --- Google API Integration ---
-// --- ADDED --- Complete implementation of Google Drive backup/restore
 async function findDriveFileId() {
   try {
     const res = await gapi.client.drive.files.list({
@@ -1040,7 +1068,10 @@ async function restoreFromDrive(btnEl) {
   }
 }
 
+let googleInitCalled = false; // Flag to prevent multiple calls
 function disableGoogleFeatures() {
+    if (googleInitCalled) return; // Only run once
+    googleInitCalled = true;
     showToast('Google services are unavailable.', 'error');
     const connectBtn = document.getElementById('google-connect-btn');
     if (connectBtn) {
@@ -1145,7 +1176,6 @@ async function updateProfileStats() {
     document.getElementById('stat-net-worth').textContent = formatCurrency(netWorth);
 }
 
-// --- FIX --- Robust timed check for missed tasks
 function scheduleMissedTaskCheck() {
     checkMissedTasks().finally(() => {
         setTimeout(scheduleMissedTaskCheck, 60 * 1000);
@@ -1158,11 +1188,9 @@ async function init() {
     await initDB();
     document.getElementById('google-connect-btn').addEventListener('click', handleGoogleAuthClick);
     document.getElementById('google-disconnect-btn').addEventListener('click', handleGoogleDisconnect);
-    // --- ADDED --- Wire up implemented Drive buttons
     document.getElementById('backup-now-btn').addEventListener('click', (e) => backupToDrive(e.target));
     document.getElementById('restore-data-btn').addEventListener('click', (e) => restoreFromDrive(e.target));
     
-    // --- ADDED --- Load and apply setting for auto-logging tasks
     const autoLogToggle = document.getElementById('auto-diary-toggle');
     const savedAutoLog = localStorage.getItem('autoLogTasks');
     if (savedAutoLog) autoLogToggle.checked = savedAutoLog === 'true';
@@ -1175,14 +1203,13 @@ async function init() {
         updateUIAfterAuth(userProfile);
     }
     await refreshAll();
-    scheduleMissedTaskCheck(); // Start the robust timed check
+    scheduleMissedTaskCheck();
   } catch (error) {
     console.error('Initialization failed:', error);
     showToast('Failed to initialize application. Please refresh.', 'error');
   }
   try { initSpeechRecognition(); } catch (error) { console.warn('Speech recognition not available:', error); }
   try{
-    // --- FIX --- Synchronize theme select dropdown with initial theme
     const savedTheme = localStorage.getItem('themeChoice') || 'auto';
     document.getElementById('theme-select').value = savedTheme;
     applyTheme(savedTheme);
