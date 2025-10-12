@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="description" content="A lightweight PWA for personal finance and diary tracking with cloud sync.">
+<base href="/alertjar/">
 <title>Alert Jar</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -844,7 +845,7 @@ async function renderGraph() {
 async function signInWithGoogle() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin }
+    options: { redirectTo: window.location.origin + '/alertjar/' }
   });
   
   if (error) {
@@ -1148,6 +1149,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+// <!-- For client-side routing (e.g., React/Vue), configure router with basename="/alertjar" to match GitHub Pages subpath -->
+</script>
+<script>
+(function() {
+  if (location.hash && location.hash.includes('=') && location.hash.includes('&')) {
+    const fragment = {};
+    const hash = location.hash.substring(1);
+    new URLSearchParams(hash).forEach((value, key) => {
+      fragment[key] = decodeURIComponent(value);
+    });
+    sessionStorage.setItem('oauth_fragment', JSON.stringify(fragment));
+    if (typeof window.handleOAuthCallback === 'function') {
+      window.handleOAuthCallback(fragment).then(() => {
+        history.replaceState(null, '', location.pathname + location.search);
+      }).catch(() => {
+        history.replaceState(null, '', location.pathname + location.search);
+      });
+    } else {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+})();
 </script>
 </body>
 </html>
